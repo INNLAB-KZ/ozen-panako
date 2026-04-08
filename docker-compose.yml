@@ -1,0 +1,12 @@
+services:
+  panako:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - panako-data:/root/.panako/dbs
+    environment:
+      - JAVA_OPTS=-Xmx2g
+
+volumes:
+  panako-data:

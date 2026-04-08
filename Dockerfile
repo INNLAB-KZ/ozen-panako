@@ -1,0 +1,14 @@
+FROM eclipse-temurin:17-jre-jammy
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY build/libs/panako-*-all.jar /app/panako.jar
+
+RUN mkdir -p /root/.panako/dbs
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "--add-opens=java.base/java.nio=ALL-UNNAMED", "-cp", "/app/panako.jar", "be.panako.http.PanakoHttpServer"]
+CMD ["SERVER_PORT=8080", "STRATEGY=OLAF"]

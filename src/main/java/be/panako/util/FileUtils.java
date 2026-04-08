@@ -458,13 +458,18 @@ public final class FileUtils {
 		if (tokens.length == 2 && tokens[0].matches("\\d+")) {
 			identifier = Integer.valueOf(tokens[0]);
 		} else {
-			int hash = getFileHash(new File(resource));
-			if(hash == 0 ) {
-				hash = Math.abs(resource.hashCode());
+			// Use the basename (filename without extension) to generate a stable identifier.
+			// This ensures the same logical resource (e.g. same ISRC) gets the same ID
+			// regardless of file format (.mp3, .aac, .m4a) or file content differences.
+			String baseName = (tokens.length >= 1) ? tokens[0] : fileName;
+			byte[] baseNameBytes = baseName.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+			int hash = MurmurHash3.murmurhash3_x86_32(baseNameBytes, 0, baseNameBytes.length, 0);
+			if(hash == 0) {
+				hash = Math.abs(baseName.hashCode());
 			}
 			//reserve the lower half of ints for sequential identifiers
 			int minValue = Integer.MAX_VALUE / 2;
-			identifier = minValue + hash / 2;
+			identifier = minValue + Math.abs(hash / 2);
 		}
 		return identifier;
 	}
