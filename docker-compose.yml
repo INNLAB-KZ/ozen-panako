@@ -1,6 +1,7 @@
 services:
   panako:
     image: innlabkz/ozen-panako:latest
+    container_name: ozen-panako
     ports:
       - "8344:8080"
     volumes:

@@ -166,6 +166,12 @@ public class PanakoHttpServer {
 		int threadPoolSize = getIntConfig("SERVER_THREAD_POOL_SIZE", DEFAULT_THREAD_POOL_SIZE);
 		int maxUploadSizeMB = getIntConfig("SERVER_MAX_UPLOAD_SIZE_MB", DEFAULT_MAX_UPLOAD_SIZE_MB);
 
+		// LMDB maxReaders is set from AVAILABLE_PROCESSORS — must be >= thread pool size
+		int configuredProcessors = Config.getInt(Key.AVAILABLE_PROCESSORS);
+		if (configuredProcessors < threadPoolSize) {
+			Config.set(Key.AVAILABLE_PROCESSORS, String.valueOf(threadPoolSize));
+		}
+
 		try {
 			PanakoHttpServer server = new PanakoHttpServer(port, threadPoolSize, maxUploadSizeMB);
 			server.start();

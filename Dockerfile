@@ -1,7 +1,7 @@
 FROM eclipse-temurin:17-jre-jammy
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg liblmdb0 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY build/libs/panako-*-all.jar /app/panako.jar
