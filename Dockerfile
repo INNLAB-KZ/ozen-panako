@@ -12,3 +12,6 @@ EXPOSE 8080
 
 ENTRYPOINT ["java", "--add-opens=java.base/java.nio=ALL-UNNAMED", "-cp", "/app/panako.jar", "be.panako.http.PanakoHttpServer"]
 CMD ["SERVER_PORT=8080", "STRATEGY=OLAF"]
+
+# Multi-platform (amd64 + arm64):
+#   docker buildx build --platform linux/amd64,linux/arm64 -t innlabkz/ozen-panako:latest --push .

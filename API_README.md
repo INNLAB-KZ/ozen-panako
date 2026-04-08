@@ -2,6 +2,8 @@
 
 Embedded REST API for the Panako acoustic fingerprinting system. No external frameworks — uses JDK built-in `com.sun.net.httpserver`.
 
+Filename is used as stable identifier key — files named `ISRC.mp3`, `ISRC.aac`, `ISRC.m4a` all map to the same identifier via murmurhash3 of the ISRC.
+
 ## Build
 
 ```bash
@@ -43,12 +45,18 @@ java --add-opens=java.base/java.nio=ALL-UNNAMED -jar build/libs/panako-2.1-all.j
 
 ```bash
 ./gradlew shadowJar
-docker compose up --build
+docker buildx build --platform linux/amd64,linux/arm64 -t innlabkz/ozen-panako:latest --push .
 ```
 
-The API will be available at `http://localhost:8080`.
+Or run with docker compose:
 
-Database files are persisted in a Docker volume (`panako-data`).
+```bash
+docker compose up
+```
+
+The API will be available at `http://localhost:8344` (mapped to container port 8080).
+
+Database files are persisted in `./data/panako-db`.
 
 ## API Endpoints
 
@@ -89,8 +97,10 @@ Response:
 
 Store audio fingerprints. Accepts `multipart/form-data` with field name `audio`.
 
+Filename should be `ISRC.ext` (e.g. `USRC17607839.mp3`). The ISRC is extracted and returned in the response.
+
 ```bash
-curl -X POST http://localhost:8080/api/v1/store -F "audio=@track.mp3"
+curl -X POST http://localhost:8080/api/v1/store -F "audio=@USRC17607839.mp3"
 ```
 
 Response:
@@ -98,13 +108,55 @@ Response:
 ```json
 {
   "status": "ok",
-  "identifier": 54657653,
-  "filename": "track.mp3",
+  "identifier": 1612789453,
+  "isrc": "USRC17607839",
+  "filename": "USRC17607839.mp3",
   "duration_seconds": 195.4,
   "fingerprints_count": 1250,
   "processing_time_ms": 2430
 }
 ```
+
+If the same ISRC is already stored (duplicate):
+
+```json
+{
+  "status": "already_exists",
+  "identifier": 1612789453,
+  "isrc": "USRC17607839",
+  "filename": "USRC17607839.mp3"
+}
+```
+
+### `POST /api/v1/store/url`
+
+Store audio fingerprints by downloading from a URL. Accepts `application/json`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/store/url \
+  -H "Content-Type: application/json" \
+  -d '{"audio_url": "https://example.com/USRC17607839.mp3", "filename": "USRC17607839.mp3"}'
+```
+
+- `audio_url` — required, URL to download the audio from
+- `filename` — optional, if omitted it is derived from the URL path
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "identifier": 1612789453,
+  "isrc": "USRC17607839",
+  "filename": "USRC17607839.mp3",
+  "audio_url": "https://example.com/USRC17607839.mp3",
+  "duration_seconds": 195.4,
+  "fingerprints_count": 1250,
+  "processing_time_ms": 2430
+}
+```
+
+Duplicate check works the same as `POST /api/v1/store`.
 
 ### `POST /api/v1/query`
 
@@ -123,8 +175,9 @@ Response:
   "processing_time_ms": 320,
   "matches": [
     {
-      "identifier": 54657653,
-      "filename": "track.mp3",
+      "identifier": 1612789453,
+      "isrc": "USRC17607839",
+      "filename": "USRC17607839.mp3",
       "match_start_seconds": 45.2,
       "match_end_seconds": 55.7,
       "query_start_seconds": 0.0,
@@ -145,7 +198,7 @@ No match returns `"matches": []`.
 Delete fingerprints. Accepts `multipart/form-data` with the original audio file.
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/delete -F "audio=@track.mp3"
+curl -X POST http://localhost:8080/api/v1/delete -F "audio=@USRC17607839.mp3"
 ```
 
 Response:
@@ -153,7 +206,7 @@ Response:
 ```json
 {
   "status": "ok",
-  "identifier": 54657653,
+  "identifier": 1612789453,
   "deleted": true
 }
 ```
@@ -167,7 +220,17 @@ Response:
 | `SERVER_THREAD_POOL_SIZE` | 10 | HTTP handler thread pool size |
 | `STRATEGY` | OLAF | Fingerprinting algorithm (`OLAF` or `PANAKO`) |
 
-Parameters can be passed as CLI arguments (`KEY=VALUE`) or set in `~/.panako/config.properties`.
+Parameters can be passed as CLI arguments (`KEY=VALUE`), system properties (`-DSERVER_PORT=8080`), or environment variables.
+
+## Identifier Logic
+
+The `identifier` is a stable numeric key derived from the filename (without extension):
+
+- `USRC17607839.mp3` → murmurhash3(`"USRC17607839"`) → same ID regardless of format
+- `USRC17607839.aac` → same ID
+- `1855.mp3` → `1855` (numeric filenames used directly)
+
+This ensures the same ISRC always maps to the same identifier, enabling duplicate detection and consistent query results.
 
 ## Concurrency
 

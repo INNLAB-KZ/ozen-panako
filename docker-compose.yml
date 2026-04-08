@@ -1,12 +1,9 @@
 services:
   panako:
-    build: .
+    image: innlabkz/ozen-panako:latest
     ports:
-      - "8080:8080"
+      - "8344:8080"
     volumes:
-      - panako-data:/root/.panako/dbs
+      - ./data/panako-db:/root/.panako/dbs
     environment:
       - JAVA_OPTS=-Xmx2g
-
-volumes:
-  panako-data:
