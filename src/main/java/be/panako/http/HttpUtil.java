@@ -71,6 +71,24 @@ public final class HttpUtil {
 	}
 
 	/**
+	 * Parse the metadata string from Strategy.metadata() and extract duration and fingerprint count.
+	 * Format: "identifier ; path ; duration (s) ; numFingerprints (#) ; printsPerSecond (#/s)"
+	 * Returns [duration, fingerprintCount] or null if parsing fails.
+	 */
+	public static double[] parseMetadata(String metadata) {
+		if (metadata == null || metadata.isEmpty()) return null;
+		try {
+			String[] parts = metadata.split(";");
+			if (parts.length >= 4) {
+				double duration = Double.parseDouble(parts[2].replaceAll("[^0-9.]", "").trim());
+				int fingerprints = Integer.parseInt(parts[3].replaceAll("[^0-9]", "").trim());
+				return new double[]{duration, fingerprints};
+			}
+		} catch (NumberFormatException ignored) {}
+		return null;
+	}
+
+	/**
 	 * Minimal JSON string escaping.
 	 */
 	public static String escapeJson(String s) {

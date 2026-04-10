@@ -18,6 +18,7 @@ import java.util.logging.Logger;
 
 /**
  * POST /api/v1/query — queries the fingerprint database with an uploaded audio file.
+ * Results are validated with {@link MatchValidator} to filter false positives.
  */
 public class QueryHandler implements HttpHandler {
 
@@ -25,6 +26,7 @@ public class QueryHandler implements HttpHandler {
 
 	private final Strategy strategy;
 	private final long maxBytes;
+	private final MatchValidator validator = new MatchValidator();
 
 	public QueryHandler(Strategy strategy, int maxUploadSizeMB) {
 		this.strategy = strategy;
@@ -75,8 +77,19 @@ public class QueryHandler implements HttpHandler {
 			json.append("\"processing_time_ms\":").append(processingTimeMs).append(",");
 			json.append("\"matches\":[");
 
-			for (int i = 0; i < handler.results.size(); i++) {
-				QueryResult r = handler.results.get(i);
+			// Filter results through validation
+			List<QueryResult> validResults = new ArrayList<>();
+			for (QueryResult r : handler.results) {
+				// 1. Match density check
+				if (!validator.validate(r, queryDuration)) continue;
+				// 2. Duration check: query should not be longer than matched reference + tolerance
+				double refDuration = r.refStop > 0 ? r.refStop : 0;
+				if (!validator.validateDuration(r, queryDuration, refDuration)) continue;
+				validResults.add(r);
+			}
+
+			for (int i = 0; i < validResults.size(); i++) {
+				QueryResult r = validResults.get(i);
 				if (i > 0) json.append(",");
 				json.append("{");
 				String isrc = HttpUtil.extractIsrc(r.refPath);

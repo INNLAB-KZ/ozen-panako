@@ -62,6 +62,7 @@ public class PanakoHttpServer {
 		// Register endpoints
 		server.createContext("/api/v1/health", new HealthHandler());
 		server.createContext("/api/v1/stats", new StatsHandler(strategy));
+		server.createContext("/api/v1/store/fingerprints", new StoreFingerprintsHandler(writeLock));
 		server.createContext("/api/v1/store/url", new StoreUrlHandler(strategy, writeLock, maxUploadSizeMB));
 		server.createContext("/api/v1/store", new StoreHandler(strategy, writeLock, maxUploadSizeMB));
 		server.createContext("/api/v1/query", new QueryHandler(strategy, maxUploadSizeMB));
@@ -79,6 +80,7 @@ public class PanakoHttpServer {
 		System.out.printf("Panako HTTP API server started on port %d (strategy: %s)%n", port, strategyName);
 		System.out.printf("  POST /api/v1/store       — store audio fingerprints (multipart)%n");
 		System.out.printf("  POST /api/v1/store/url   — store audio from URL (JSON)%n");
+		System.out.printf("  POST /api/v1/store/fingerprints — store pre-computed fingerprints (JSON)%n");
 		System.out.printf("  POST /api/v1/query       — query for matches%n");
 		System.out.printf("  POST /api/v1/delete      — delete fingerprints%n");
 		System.out.printf("  GET  /api/v1/stats       — database statistics%n");

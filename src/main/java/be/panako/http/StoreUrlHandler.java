@@ -88,7 +88,15 @@ public class StoreUrlHandler implements HttpHandler {
 				json.append("\"status\":\"already_exists\",");
 				json.append("\"identifier\":").append(identifier).append(",");
 				json.append("\"isrc\":\"").append(HttpUtil.escapeJson(isrc)).append("\",");
-				json.append("\"filename\":\"").append(HttpUtil.escapeJson(filename)).append("\"");
+				json.append("\"filename\":\"").append(HttpUtil.escapeJson(filename)).append("\",");
+				double[] meta = HttpUtil.parseMetadata(strategy.metadata(filePath));
+				if (meta != null) {
+					json.append("\"duration_seconds\":").append(String.format("%.1f", meta[0])).append(",");
+					json.append("\"fingerprints_count\":").append((int) meta[1]);
+				} else {
+					json.append("\"duration_seconds\":0,");
+					json.append("\"fingerprints_count\":0");
+				}
 				json.append("}");
 				HttpUtil.sendJson(exchange, 200, json.toString());
 				return;

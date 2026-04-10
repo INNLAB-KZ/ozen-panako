@@ -124,7 +124,9 @@ If the same ISRC is already stored (duplicate):
   "status": "already_exists",
   "identifier": 1612789453,
   "isrc": "USRC17607839",
-  "filename": "USRC17607839.mp3"
+  "filename": "USRC17607839.mp3",
+  "duration_seconds": 195.4,
+  "fingerprints_count": 1250
 }
 ```
 
@@ -156,11 +158,55 @@ Response:
 }
 ```
 
-Duplicate check works the same as `POST /api/v1/store`.
+Duplicate check works the same as `POST /api/v1/store` (returns `already_exists` with `duration_seconds` and `fingerprints_count`).
+
+### `POST /api/v1/store/fingerprints`
+
+Store pre-computed fingerprints directly without sending audio. Accepts `application/json`.
+
+This is useful when fingerprints are extracted on the client side (e.g. via `panako print`) and only the compact fingerprint data needs to be sent to the server.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/store/fingerprints \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "USRC17607839.mp3",
+    "duration": 195.4,
+    "fingerprints": [
+      {"hash": 123456789, "t1": 10, "f1": 200},
+      {"hash": 987654321, "t1": 20, "f1": 150}
+    ]
+  }'
+```
+
+- `filename` — required, used to derive identifier and ISRC
+- `duration` — required, audio duration in seconds
+- `identifier` — optional, if omitted it is derived from the filename
+- `fingerprints` — required, array of `{hash, t1, f1}` objects
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "identifier": 1612789453,
+  "isrc": "USRC17607839",
+  "filename": "USRC17607839.mp3",
+  "duration_seconds": 195.4,
+  "fingerprints_count": 2,
+  "processing_time_ms": 5
+}
+```
+
+Duplicate check works the same as other store endpoints.
 
 ### `POST /api/v1/query`
 
 Query for matches. Accepts `multipart/form-data` with field name `audio`.
+
+Results are validated to filter false positives:
+- **Match density**: short clips (< 15s) need >= 8 matches; longer clips need >= max(duration x 0.15, 20)
+- **Duration check**: query must not be longer than matched reference + 5 seconds
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/query -F "audio=@fragment.mp3"
