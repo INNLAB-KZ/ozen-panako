@@ -80,9 +80,11 @@ public class QueryHandler implements HttpHandler {
 			// Filter results through validation
 			List<QueryResult> validResults = new ArrayList<>();
 			for (QueryResult r : handler.results) {
-				// 1. Match density check
+				// 1. Score and match_percentage check
+				if (!validator.validateQuality(r)) continue;
+				// 2. Match density check
 				if (!validator.validate(r, queryDuration)) continue;
-				// 2. Duration check: query should not be longer than matched reference + tolerance
+				// 3. Duration check: query should not be longer than matched reference + tolerance
 				double refDuration = r.refStop > 0 ? r.refStop : 0;
 				if (!validator.validateDuration(r, queryDuration, refDuration)) continue;
 				validResults.add(r);

@@ -65,7 +65,11 @@ public class PanakoHttpServer {
 		server.createContext("/api/v1/store/fingerprints", new StoreFingerprintsHandler(writeLock));
 		server.createContext("/api/v1/store/url", new StoreUrlHandler(strategy, writeLock, maxUploadSizeMB));
 		server.createContext("/api/v1/store", new StoreHandler(strategy, writeLock, maxUploadSizeMB));
+		server.createContext("/api/v1/query/fingerprints", new QueryFingerprintsHandler());
 		server.createContext("/api/v1/query", new QueryHandler(strategy, maxUploadSizeMB));
+		server.createContext("/api/v1/monitor/fingerprints", new MonitorFingerprintsHandler());
+		server.createContext("/api/v1/monitor/url", new MonitorUrlHandler(strategy, maxUploadSizeMB));
+		server.createContext("/api/v1/monitor", new MonitorHandler(strategy, maxUploadSizeMB));
 		server.createContext("/api/v1/delete", new DeleteHandler(strategy, writeLock, maxUploadSizeMB));
 
 		LOG.info(String.format("Panako HTTP server configured on port %d with %d threads", port, threadPoolSize));
@@ -82,6 +86,10 @@ public class PanakoHttpServer {
 		System.out.printf("  POST /api/v1/store/url   — store audio from URL (JSON)%n");
 		System.out.printf("  POST /api/v1/store/fingerprints — store pre-computed fingerprints (JSON)%n");
 		System.out.printf("  POST /api/v1/query       — query for matches%n");
+		System.out.printf("  POST /api/v1/query/fingerprints — query with pre-computed fingerprints (JSON)%n");
+		System.out.printf("  POST /api/v1/monitor     — monitor long audio for multiple matches (multipart)%n");
+		System.out.printf("  POST /api/v1/monitor/url — monitor audio from URL (JSON)%n");
+		System.out.printf("  POST /api/v1/monitor/fingerprints — monitor with pre-computed fingerprints (JSON)%n");
 		System.out.printf("  POST /api/v1/delete      — delete fingerprints%n");
 		System.out.printf("  GET  /api/v1/stats       — database statistics%n");
 		System.out.printf("  GET  /api/v1/health      — health check%n");

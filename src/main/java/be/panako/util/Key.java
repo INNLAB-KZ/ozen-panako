@@ -56,13 +56,13 @@ public enum Key{
 	/**
 	 * The step size while monitoring a long audio fragment, in seconds.
 	 */
-	MONITOR_STEP_SIZE(25),
+	MONITOR_STEP_SIZE(30),
 
 	/**
 	 * The overlap, also in seconds. By default detection resolution is 
 	 * 25-5=20 seconds.
 	 */
-	MONITOR_OVERLAP(5),
+	MONITOR_OVERLAP(10),
 	
 	/**
 	 * Enabling the ffmpeg pipe allows support for almost all audio formats in the
@@ -436,7 +436,41 @@ public enum Key{
 	 * Use the default (CPU based JGaborator) Event point extractor or use CUDA/MPS for event point
 	 * extraction. The python server needs to be running if set to true.
 	 */
-	PANAKO_USE_GPU_EP_EXTRACTOR("FALSE");
+	PANAKO_USE_GPU_EP_EXTRACTOR("FALSE"),
+
+
+	///////////////////HTTP API config
+
+	/**
+	 * Minimum score (fingerprint hit count) to accept a query match.
+	 */
+	MATCH_MIN_SCORE(20),
+
+	/**
+	 * Minimum match percentage (0.0–1.0) to accept a query match.
+	 * 0.5 means at least 50% of seconds must have matching fingerprints.
+	 */
+	MATCH_MIN_PERCENTAGE(0.5),
+
+	/**
+	 * Minimum total score to accept a monitor match (summed across windows).
+	 */
+	MONITOR_MIN_SCORE(20),
+
+	/**
+	 * Minimum match percentage (0.0–1.0) to accept a monitor match.
+	 */
+	MONITOR_MIN_PERCENTAGE(0.5),
+
+	/**
+	 * Minimum gap (seconds) in match_start/match_end to trigger boundary refinement.
+	 */
+	MONITOR_REFINE_THRESHOLD(5.0),
+
+	/**
+	 * Chunk size (seconds) for boundary refinement queries.
+	 */
+	MONITOR_REFINE_CHUNK_SIZE(30);
 
 
     String defaultValue;

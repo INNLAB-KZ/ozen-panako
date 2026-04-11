@@ -204,6 +204,23 @@ Duplicate check works the same as other store endpoints.
 
 Query for matches. Accepts `multipart/form-data` with field name `audio`.
 
+### `POST /api/v1/query/fingerprints`
+
+Query for matches using pre-computed fingerprints (no audio needed). Accepts `application/json`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/query/fingerprints \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fingerprints": [
+      {"hash": 123456789, "t1": 10, "f1": 200},
+      {"hash": 987654321, "t1": 20, "f1": 150}
+    ]
+  }'
+```
+
+Response format is identical to `POST /api/v1/query`.
+
 Results are validated to filter false positives:
 - **Match density**: short clips (< 15s) need >= 8 matches; longer clips need >= max(duration x 0.15, 20)
 - **Duration check**: query must not be longer than matched reference + 5 seconds
@@ -238,6 +255,93 @@ Response:
 ```
 
 No match returns `"matches": []`.
+
+### `POST /api/v1/monitor`
+
+Monitor a long audio file (e.g. radio recording) and find all matching tracks. The audio is split into overlapping windows (default 25s with 5s overlap) and each window is queried separately. Results are **deduplicated by track** — multiple window hits for the same track are merged into a single entry with the overall time range. Accepts `multipart/form-data` with field name `audio`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/monitor -F "audio=@radio_recording.mp3"
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "processing_time_ms": 15230,
+  "unique_tracks_count": 2,
+  "matches": [
+    {
+      "identifier": 1612789453,
+      "isrc": "USRC17607839",
+      "filename": "USRC17607839.mp3",
+      "query_start_seconds": 60.0,
+      "query_end_seconds": 255.4,
+      "match_start_seconds": 0.0,
+      "match_end_seconds": 195.4,
+      "score": 450,
+      "time_factor": 1.001,
+      "frequency_factor": 1.000,
+      "match_percentage": 85.0,
+      "window_hits": 3
+    },
+    {
+      "identifier": 987654321,
+      "isrc": "GBAYE0601498",
+      "filename": "GBAYE0601498.mp3",
+      "query_start_seconds": 300.0,
+      "query_end_seconds": 520.0,
+      "match_start_seconds": 10.2,
+      "match_end_seconds": 230.0,
+      "score": 600,
+      "time_factor": 1.000,
+      "frequency_factor": 1.000,
+      "match_percentage": 90.5,
+      "window_hits": 5
+    }
+  ]
+}
+```
+
+- `unique_tracks_count` — number of distinct tracks identified
+- `query_start_seconds` / `query_end_seconds` — when the track starts/ends in your recording
+- `match_start_seconds` / `match_end_seconds` — matched region in the reference track
+- `score` — total score across all windows
+- `window_hits` — how many monitoring windows matched this track
+
+### `POST /api/v1/monitor/url`
+
+Monitor audio downloaded from a URL. Accepts `application/json`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/monitor/url \
+  -H "Content-Type: application/json" \
+  -d '{"audio_url": "https://example.com/radio_recording.mp3"}'
+```
+
+- `audio_url` — required, URL to download the audio from
+- `filename` — optional, if omitted it is derived from the URL path
+
+Response format is identical to `POST /api/v1/monitor`.
+
+### `POST /api/v1/monitor/fingerprints`
+
+Monitor with pre-computed fingerprints. Splits fingerprints into overlapping time windows and queries each window. Accepts `application/json`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/monitor/fingerprints \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fingerprints": [
+      {"hash": 123456789, "t1": 10, "f1": 200},
+      {"hash": 987654321, "t1": 20, "f1": 150},
+      {"hash": 555555555, "t1": 5000, "f1": 180}
+    ]
+  }'
+```
+
+Response format is identical to `POST /api/v1/monitor`.
 
 ### `POST /api/v1/delete`
 
