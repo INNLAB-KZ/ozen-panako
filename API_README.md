@@ -204,24 +204,8 @@ Duplicate check works the same as other store endpoints.
 
 Query for matches. Accepts `multipart/form-data` with field name `audio`.
 
-### `POST /api/v1/query/fingerprints`
-
-Query for matches using pre-computed fingerprints (no audio needed). Accepts `application/json`.
-
-```bash
-curl -X POST http://localhost:8080/api/v1/query/fingerprints \
-  -H "Content-Type: application/json" \
-  -d '{
-    "fingerprints": [
-      {"hash": 123456789, "t1": 10, "f1": 200},
-      {"hash": 987654321, "t1": 20, "f1": 150}
-    ]
-  }'
-```
-
-Response format is identical to `POST /api/v1/query`.
-
 Results are validated to filter false positives:
+- **Quality check**: score >= `MATCH_MIN_SCORE` (default 20) and match_percentage >= `MATCH_MIN_PERCENTAGE` (default 0.5)
 - **Match density**: short clips (< 15s) need >= 8 matches; longer clips need >= max(duration x 0.15, 20)
 - **Duration check**: query must not be longer than matched reference + 5 seconds
 
@@ -256,9 +240,33 @@ Response:
 
 No match returns `"matches": []`.
 
+### `POST /api/v1/query/fingerprints`
+
+Query for matches using pre-computed fingerprints (no audio needed). Accepts `application/json`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/query/fingerprints \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fingerprints": [
+      {"hash": 123456789, "t1": 10, "f1": 200},
+      {"hash": 987654321, "t1": 20, "f1": 150}
+    ]
+  }'
+```
+
+Response format is identical to `POST /api/v1/query`.
+
 ### `POST /api/v1/monitor`
 
-Monitor a long audio file (e.g. radio recording) and find all matching tracks. The audio is split into overlapping windows (default 25s with 5s overlap) and each window is queried separately. Results are **deduplicated by track** — multiple window hits for the same track are merged into a single entry with the overall time range. Accepts `multipart/form-data` with field name `audio`.
+Monitor a long audio file (e.g. radio recording) and find all matching tracks. The audio is split into overlapping windows and each window is queried separately. Results are **deduplicated by track** — multiple window hits for the same track are merged into a single entry with the overall time range. Accepts `multipart/form-data` with field name `audio`.
+
+**How it works:**
+1. Audio is split into overlapping windows (configurable via `MONITOR_STEP_SIZE` and `MONITOR_OVERLAP`)
+2. Each window is queried against the fingerprint database
+3. Results are merged by track identifier with absolute timestamps
+4. **Boundary refinement**: if the match doesn't start at the beginning or end of the reference track, additional queries are made to find the precise start/end times
+5. False positives are filtered by `MONITOR_MIN_SCORE` and `MONITOR_MIN_PERCENTAGE`
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/monitor -F "audio=@radio_recording.mp3"
@@ -277,38 +285,53 @@ Response:
       "isrc": "USRC17607839",
       "filename": "USRC17607839.mp3",
       "query_start_seconds": 60.0,
+      "query_start_time": "00:01:00",
       "query_end_seconds": 255.4,
+      "query_end_time": "00:04:15",
       "match_start_seconds": 0.0,
       "match_end_seconds": 195.4,
-      "score": 450,
+      "score": 4500,
       "time_factor": 1.001,
       "frequency_factor": 1.000,
-      "match_percentage": 85.0,
-      "window_hits": 3
+      "match_percentage": 1.0,
+      "window_hits": 9
     },
     {
       "identifier": 987654321,
       "isrc": "GBAYE0601498",
       "filename": "GBAYE0601498.mp3",
       "query_start_seconds": 300.0,
+      "query_start_time": "00:05:00",
       "query_end_seconds": 520.0,
+      "query_end_time": "00:08:40",
       "match_start_seconds": 10.2,
       "match_end_seconds": 230.0,
-      "score": 600,
+      "score": 6000,
       "time_factor": 1.000,
       "frequency_factor": 1.000,
-      "match_percentage": 90.5,
-      "window_hits": 5
+      "match_percentage": 0.9,
+      "window_hits": 11
     }
   ]
 }
 ```
 
-- `unique_tracks_count` — number of distinct tracks identified
-- `query_start_seconds` / `query_end_seconds` — when the track starts/ends in your recording
-- `match_start_seconds` / `match_end_seconds` — matched region in the reference track
-- `score` — total score across all windows
-- `window_hits` — how many monitoring windows matched this track
+Response fields:
+
+| Field | Description |
+|---|---|
+| `unique_tracks_count` | Number of distinct tracks identified |
+| `query_start_seconds` | When the track starts in your recording (seconds) |
+| `query_start_time` | Same as above in `HH:mm:ss` format |
+| `query_end_seconds` | When the track ends in your recording (seconds) |
+| `query_end_time` | Same as above in `HH:mm:ss` format |
+| `match_start_seconds` | Where the match starts in the reference track |
+| `match_end_seconds` | Where the match ends in the reference track |
+| `score` | Total fingerprint hit count across all windows |
+| `time_factor` | Time stretching factor (1.0 = no change) |
+| `frequency_factor` | Pitch shifting factor (1.0 = no change) |
+| `match_percentage` | Fraction of seconds with matching fingerprints (0.0-1.0) |
+| `window_hits` | How many monitoring windows matched this track |
 
 ### `POST /api/v1/monitor/url`
 
@@ -322,24 +345,6 @@ curl -X POST http://localhost:8080/api/v1/monitor/url \
 
 - `audio_url` — required, URL to download the audio from
 - `filename` — optional, if omitted it is derived from the URL path
-
-Response format is identical to `POST /api/v1/monitor`.
-
-### `POST /api/v1/monitor/fingerprints`
-
-Monitor with pre-computed fingerprints. Splits fingerprints into overlapping time windows and queries each window. Accepts `application/json`.
-
-```bash
-curl -X POST http://localhost:8080/api/v1/monitor/fingerprints \
-  -H "Content-Type: application/json" \
-  -d '{
-    "fingerprints": [
-      {"hash": 123456789, "t1": 10, "f1": 200},
-      {"hash": 987654321, "t1": 20, "f1": 150},
-      {"hash": 555555555, "t1": 5000, "f1": 180}
-    ]
-  }'
-```
 
 Response format is identical to `POST /api/v1/monitor`.
 
@@ -363,6 +368,10 @@ Response:
 
 ## Configuration
 
+All parameters can be set via CLI arguments (`KEY=VALUE`), system properties (`-DKEY=VALUE`), environment variables, or `~/.panako/config.properties`.
+
+### Server
+
 | Parameter | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | 8080 | HTTP server port |
@@ -370,15 +379,43 @@ Response:
 | `SERVER_THREAD_POOL_SIZE` | 10 | HTTP handler thread pool size |
 | `STRATEGY` | OLAF | Fingerprinting algorithm (`OLAF` or `PANAKO`) |
 
-Parameters can be passed as CLI arguments (`KEY=VALUE`), system properties (`-DSERVER_PORT=8080`), or environment variables.
+### Query filtering
+
+| Parameter | Default | Description |
+|---|---|---|
+| `MATCH_MIN_SCORE` | 20 | Minimum score (fingerprint hits) to accept a query match |
+| `MATCH_MIN_PERCENTAGE` | 0.5 | Minimum match percentage (0.0-1.0) for query results |
+
+### Monitor
+
+| Parameter | Default | Description |
+|---|---|---|
+| `MONITOR_STEP_SIZE` | 30 | Window size in seconds |
+| `MONITOR_OVERLAP` | 10 | Window overlap in seconds (step = STEP_SIZE - OVERLAP) |
+| `MONITOR_MIN_SCORE` | 20 | Minimum total score to accept a monitor match |
+| `MONITOR_MIN_PERCENTAGE` | 0.5 | Minimum match percentage (0.0-1.0) for monitor results |
+| `MONITOR_REFINE_THRESHOLD` | 5.0 | Gap in seconds to trigger boundary refinement |
+| `MONITOR_REFINE_CHUNK_SIZE` | 30 | Chunk size in seconds for refinement queries |
+
+Example — stricter filtering and larger monitor windows:
+
+```bash
+java --add-opens=java.base/java.nio=ALL-UNNAMED \
+  -cp build/libs/panako-2.1-all.jar \
+  be.panako.http.PanakoHttpServer \
+  MATCH_MIN_SCORE=50 \
+  MONITOR_MIN_PERCENTAGE=0.7 \
+  MONITOR_STEP_SIZE=30 \
+  MONITOR_OVERLAP=10
+```
 
 ## Identifier Logic
 
 The `identifier` is a stable numeric key derived from the filename (without extension):
 
-- `USRC17607839.mp3` → murmurhash3(`"USRC17607839"`) → same ID regardless of format
-- `USRC17607839.aac` → same ID
-- `1855.mp3` → `1855` (numeric filenames used directly)
+- `USRC17607839.mp3` -> murmurhash3(`"USRC17607839"`) -> same ID regardless of format
+- `USRC17607839.aac` -> same ID
+- `1855.mp3` -> `1855` (numeric filenames used directly)
 
 This ensures the same ISRC always maps to the same identifier, enabling duplicate detection and consistent query results.
 
