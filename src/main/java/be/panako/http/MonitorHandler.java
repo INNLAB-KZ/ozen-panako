@@ -322,30 +322,47 @@ public class MonitorHandler implements HttpHandler {
 		String targetId = m.identifier;
 
 		// --- Refine START ---
+		// Try multiple chunks working backward from the first detection to find the true start.
+		// Chunk 1: just before query_start (captures audio right before first detection)
+		// Chunk 2: further back, near the estimated start (if the track plays from beginning)
 		if (m.refStart >= refineThreshold) {
-			// Estimate where the track actually starts in the recording
 			double estimatedStart = m.queryStart - m.refStart;
-			double chunkOffset = Math.max(0, estimatedStart - 5);
+			double bestQueryStart = m.queryStart;
+			double bestRefStart = m.refStart;
 
-			Path chunk = extractAudioChunkDouble(recordingPath, chunkOffset, refineChunkSize);
-			try {
-				CollectingResultHandler handler = new CollectingResultHandler();
-				strategy.query(chunk.toAbsolutePath().toString(), maxResults, new HashSet<>(), handler);
+			// Chunk positions to try: close to detection first, then further back
+			double[] offsets = {
+				Math.max(0, m.queryStart - refineChunkSize),  // right before first detection
+				Math.max(0, (m.queryStart + estimatedStart) / 2 - 5),  // midpoint
+				Math.max(0, estimatedStart - 5)  // near estimated start
+			};
 
-				for (QueryResult r : handler.results) {
-					if (r.refIdentifier.equals(targetId)) {
-						double absoluteQueryStart = r.queryStart + chunkOffset;
-						if (absoluteQueryStart < m.queryStart) {
-							m.queryStart = absoluteQueryStart;
-							m.refStart = r.refStart;
-							LOG.info(String.format("Refined START for %s: query_start=%.1f, match_start=%.1f",
-									m.isrc, m.queryStart, m.refStart));
+			for (double chunkOffset : offsets) {
+				Path chunk = extractAudioChunkDouble(recordingPath, chunkOffset, refineChunkSize);
+				try {
+					CollectingResultHandler handler = new CollectingResultHandler();
+					strategy.query(chunk.toAbsolutePath().toString(), maxResults, new HashSet<>(), handler);
+
+					for (QueryResult r : handler.results) {
+						if (r.refIdentifier.equals(targetId)) {
+							double absoluteQueryStart = r.queryStart + chunkOffset;
+							if (absoluteQueryStart < bestQueryStart) {
+								bestQueryStart = absoluteQueryStart;
+								bestRefStart = r.refStart;
+							}
+							break;
 						}
-						break;
 					}
+				} finally {
+					try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
 				}
-			} finally {
-				try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
+			}
+
+			if (bestQueryStart < m.queryStart) {
+				m.queryStart = bestQueryStart;
+				m.refStart = bestRefStart;
+				LOG.info(String.format("Refined START for %s: query_start=%.1f, match_start=%.1f",
+						m.isrc, m.queryStart, m.refStart));
 			}
 		}
 
@@ -365,28 +382,43 @@ public class MonitorHandler implements HttpHandler {
 		if (refDuration > 0) {
 			double gapAtEnd = refDuration - m.refEnd;
 			if (gapAtEnd >= refineThreshold) {
-				// Track continued playing after our last detection
-				double chunkOffset = Math.max(0, m.queryEnd - 5);
+				double estimatedEnd = m.queryEnd + gapAtEnd;
+				double bestQueryEnd = m.queryEnd;
+				double bestRefEnd = m.refEnd;
 
-				Path chunk = extractAudioChunkDouble(recordingPath, chunkOffset, refineChunkSize);
-				try {
-					CollectingResultHandler handler = new CollectingResultHandler();
-					strategy.query(chunk.toAbsolutePath().toString(), maxResults, new HashSet<>(), handler);
+				// Chunk positions: right after last detection, midpoint, near estimated end
+				double[] offsets = {
+					Math.max(0, m.queryEnd - 5),  // right after last detection
+					Math.max(0, (m.queryEnd + estimatedEnd) / 2 - refineChunkSize / 2.0),  // midpoint
+					Math.max(0, estimatedEnd - refineChunkSize + 5)  // near estimated end
+				};
 
-					for (QueryResult r : handler.results) {
-						if (r.refIdentifier.equals(targetId)) {
-							double absoluteQueryEnd = r.queryStop + chunkOffset;
-							if (absoluteQueryEnd > m.queryEnd) {
-								m.queryEnd = absoluteQueryEnd;
-								m.refEnd = r.refStop;
-								LOG.info(String.format("Refined END for %s: query_end=%.1f, match_end=%.1f",
-										m.isrc, m.queryEnd, m.refEnd));
+				for (double chunkOffset : offsets) {
+					Path chunk = extractAudioChunkDouble(recordingPath, chunkOffset, refineChunkSize);
+					try {
+						CollectingResultHandler handler = new CollectingResultHandler();
+						strategy.query(chunk.toAbsolutePath().toString(), maxResults, new HashSet<>(), handler);
+
+						for (QueryResult r : handler.results) {
+							if (r.refIdentifier.equals(targetId)) {
+								double absoluteQueryEnd = r.queryStop + chunkOffset;
+								if (absoluteQueryEnd > bestQueryEnd) {
+									bestQueryEnd = absoluteQueryEnd;
+									bestRefEnd = r.refStop;
+								}
+								break;
 							}
-							break;
 						}
+					} finally {
+						try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
 					}
-				} finally {
-					try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
+				}
+
+				if (bestQueryEnd > m.queryEnd) {
+					m.queryEnd = bestQueryEnd;
+					m.refEnd = bestRefEnd;
+					LOG.info(String.format("Refined END for %s: query_end=%.1f, match_end=%.1f",
+							m.isrc, m.queryEnd, m.refEnd));
 				}
 			}
 		}
