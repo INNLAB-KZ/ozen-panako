@@ -230,6 +230,8 @@ public class StoreFingerprintsHandler implements HttpHandler {
 		OlafStorage db;
 		if (Config.get(Key.OLAF_STORAGE).equalsIgnoreCase("LMDB")) {
 			db = OlafStorageKV.getInstance();
+		} else if (Config.get(Key.OLAF_STORAGE).equalsIgnoreCase("CLICKHOUSE")) {
+			db = OlafStorageClickHouse.getInstance();
 		} else if (Config.get(Key.OLAF_STORAGE).equalsIgnoreCase("FILE")) {
 			db = OlafStorageFile.getInstance();
 		} else {

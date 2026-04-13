@@ -1,10 +1,35 @@
 services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: ozen-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   panako:
     image: innlabkz/ozen-panako:latest
     container_name: ozen-panako
     ports:
       - "8344:8080"
-    volumes:
-      - ./data/panako-db:/root/.panako/dbs
     environment:
       - JAVA_OPTS=-Xmx2g
+      - STRATEGY=PANAKO
+      - PANAKO_STORAGE=CLICKHOUSE
+      - PANAKO_CLICKHOUSE_URL=jdbc:ch://clickhouse:8123/default
+      - PANAKO_CACHE_TO_FILE=FALSE
+      - PANAKO_USE_CACHED_PRINTS=FALSE
+      - SERVER_PORT=8080
+    depends_on:
+      clickhouse:
+        condition: service_healthy

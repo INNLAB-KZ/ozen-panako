@@ -40,6 +40,7 @@ dependencies {
 //    implementation 'com.github.jnr:jnr-ffi:2.2.13'
 
     implementation "org.mlmdbjava:lmdbjava:0.9.1"
+    implementation 'com.clickhouse:clickhouse-jdbc:0.9.8:all'
     implementation 'be.tarsos.dsp:core:2.5'
     implementation 'be.tarsos.dsp:jvm:2.5'
     implementation 'be.ugent.jgaborator:jgaborator:0.7'

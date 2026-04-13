@@ -470,7 +470,19 @@ public enum Key{
 	/**
 	 * Chunk size (seconds) for boundary refinement queries.
 	 */
-	MONITOR_REFINE_CHUNK_SIZE(30);
+	MONITOR_REFINE_CHUNK_SIZE(30),
+
+	/**
+	 * ClickHouse JDBC URL for OLAF storage.
+	 * Used when OLAF_STORAGE=CLICKHOUSE.
+	 */
+	OLAF_CLICKHOUSE_URL("jdbc:ch://localhost:8123/default"),
+
+	/**
+	 * ClickHouse JDBC URL for PANAKO storage.
+	 * Used when PANAKO_STORAGE=CLICKHOUSE.
+	 */
+	PANAKO_CLICKHOUSE_URL("jdbc:ch://localhost:8123/default");
 
 
     String defaultValue;

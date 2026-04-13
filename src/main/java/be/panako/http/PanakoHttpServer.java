@@ -145,7 +145,15 @@ public class PanakoHttpServer {
 	public static void main(String[] args) {
 		Locale.setDefault(Locale.US);
 
-		// Parse KEY=VALUE arguments and set as Panako config overrides
+		// Read config from environment variables (for Docker)
+		for (Key key : Key.values()) {
+			String envVal = System.getenv(key.name());
+			if (envVal != null && !envVal.isEmpty()) {
+				Config.set(key, envVal);
+			}
+		}
+
+		// Parse KEY=VALUE arguments (override env vars)
 		for (String arg : args) {
 			if (arg.contains("=")) {
 				String[] parts = arg.split("=", 2);
