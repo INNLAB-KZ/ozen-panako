@@ -64,25 +64,31 @@ public class StoreHandler implements HttpHandler {
 			int identifier = FileUtils.getIdentifier(filePath);
 			String isrc = HttpUtil.extractIsrc(upload.fileName);
 
-			// Check for duplicates
+			// Check for duplicates — verify integrity of existing data
 			if (strategy.hasResource(filePath)) {
-				StringBuilder json = new StringBuilder();
-				json.append("{");
-				json.append("\"status\":\"already_exists\",");
-				json.append("\"identifier\":").append(identifier).append(",");
-				json.append("\"isrc\":\"").append(HttpUtil.escapeJson(isrc)).append("\",");
-				json.append("\"filename\":\"").append(HttpUtil.escapeJson(upload.fileName)).append("\",");
 				double[] meta = HttpUtil.parseMetadata(strategy.metadata(filePath));
-				if (meta != null) {
+				if (meta != null && meta[0] > 0 && meta[1] > 0) {
+					// Existing data looks complete — return duplicate
+					StringBuilder json = new StringBuilder();
+					json.append("{");
+					json.append("\"status\":\"already_exists\",");
+					json.append("\"identifier\":").append(identifier).append(",");
+					json.append("\"isrc\":\"").append(HttpUtil.escapeJson(isrc)).append("\",");
+					json.append("\"filename\":\"").append(HttpUtil.escapeJson(upload.fileName)).append("\",");
 					json.append("\"duration_seconds\":").append(String.format("%.1f", meta[0])).append(",");
 					json.append("\"fingerprints_count\":").append((int) meta[1]);
-				} else {
-					json.append("\"duration_seconds\":0,");
-					json.append("\"fingerprints_count\":0");
+					json.append("}");
+					HttpUtil.sendJson(exchange, 200, json.toString());
+					return;
 				}
-				json.append("}");
-				HttpUtil.sendJson(exchange, 200, json.toString());
-				return;
+				// Incomplete data from interrupted store — delete and re-store
+				LOG.warning("Incomplete data for " + upload.fileName + " — deleting and re-storing");
+				writeLock.lock();
+				try {
+					strategy.delete(filePath);
+				} finally {
+					writeLock.unlock();
+				}
 			}
 
 			long startTime = System.currentTimeMillis();

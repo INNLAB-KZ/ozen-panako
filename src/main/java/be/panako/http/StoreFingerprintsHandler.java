@@ -133,7 +133,15 @@ public class StoreFingerprintsHandler implements HttpHandler {
 
 	private int storeOlaf(String arrayContent, int identifier, String filename, float duration) {
 		OlafStorage db = getOlafStorage();
-		if (db.getMetadata(identifier) != null) return -1;
+		OlafResourceMetadata existing = db.getMetadata(identifier);
+		if (existing != null) {
+			if (existing.duration > 0 && existing.numFingerprints > 0) {
+				return -1; // complete data — true duplicate
+			}
+			// Incomplete data from interrupted store — delete and re-store
+			LOG.warning("Incomplete OLAF data for " + filename + " — re-storing");
+			db.deleteMetadata(identifier);
+		}
 
 		int count = 0;
 		int pos = 0;
@@ -161,7 +169,14 @@ public class StoreFingerprintsHandler implements HttpHandler {
 
 	private int storePanako(String arrayContent, int identifier, String filename, float duration) {
 		PanakoStorage db = getPanakoStorage();
-		if (db.getMetadata(identifier) != null) return -1;
+		PanakoResourceMetadata existing = db.getMetadata(identifier);
+		if (existing != null) {
+			if (existing.duration > 0 && existing.numFingerprints > 0) {
+				return -1; // complete data — true duplicate
+			}
+			LOG.warning("Incomplete PANAKO data for " + filename + " — re-storing");
+			db.deleteMetadata(identifier);
+		}
 
 		int count = 0;
 		int pos = 0;

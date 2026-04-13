@@ -187,6 +187,53 @@ public class MonitorHandler implements HttpHandler {
 	 *       Extract 30s from (query_end) and re-query to find precise end.</li>
 	 * </ul>
 	 */
+	/**
+	 * Extracts waveform data (peak amplitudes) from an audio file using ffmpeg.
+	 * Returns one float per second, normalized to 0.0-1.0.
+	 */
+	static float[] extractWaveform(String filePath) throws IOException {
+		double duration = getAudioDuration(filePath);
+		int totalSeconds = (int) Math.ceil(duration);
+		if (totalSeconds <= 0) return new float[0];
+
+		// Decode to raw 16-bit mono PCM at 8000 Hz (low rate for speed)
+		int sampleRate = 8000;
+		ProcessBuilder pb = new ProcessBuilder(
+				"ffmpeg", "-y", "-i", filePath,
+				"-ac", "1", "-ar", String.valueOf(sampleRate),
+				"-f", "s16le", "-acodec", "pcm_s16le", "pipe:1");
+		pb.redirectErrorStream(false);
+		Process p = pb.start();
+		Thread errThread = new Thread(() -> {
+			try { p.getErrorStream().readAllBytes(); } catch (IOException ignored) {}
+		});
+		errThread.setDaemon(true);
+		errThread.start();
+
+		byte[] raw = p.getInputStream().readAllBytes();
+		try { p.waitFor(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+		int totalSamples = raw.length / 2;
+		float[] waveform = new float[totalSeconds];
+
+		for (int sec = 0; sec < totalSeconds; sec++) {
+			int startSample = sec * sampleRate;
+			int endSample = Math.min(startSample + sampleRate, totalSamples);
+			float peak = 0;
+			for (int i = startSample; i < endSample; i++) {
+				if (i * 2 + 1 >= raw.length) break;
+				int lo = raw[i * 2] & 0xFF;
+				int hi = raw[i * 2 + 1];
+				short sample = (short) (lo | (hi << 8));
+				float abs = Math.abs(sample) / 32768.0f;
+				if (abs > peak) peak = abs;
+			}
+			waveform[sec] = peak;
+		}
+
+		return waveform;
+	}
+
 	static String buildResponseJson(Strategy strategy, List<QueryResult> results,
 									String recordingPath, long processingTimeMs) {
 		// Group by identifier
@@ -285,7 +332,23 @@ public class MonitorHandler implements HttpHandler {
 			json.append("}");
 		}
 
+		json.append("],");
+
+		// Waveform — peak amplitude per second for the full recording
+		json.append("\"waveform\":[");
+		if (recordingPath != null) {
+			try {
+				float[] waveform = extractWaveform(recordingPath);
+				for (int i = 0; i < waveform.length; i++) {
+					if (i > 0) json.append(",");
+					json.append(String.format("%.3f", waveform[i]));
+				}
+			} catch (Exception e) {
+				LOG.log(Level.WARNING, "Waveform extraction failed: " + e.getMessage());
+			}
+		}
 		json.append("]");
+
 		json.append("}");
 		return json.toString();
 	}
@@ -367,7 +430,8 @@ public class MonitorHandler implements HttpHandler {
 		}
 
 		// --- Refine END ---
-		// Get reference track duration from metadata
+		// Always try to refine end — look further in the recording for more of the track.
+		// If we have metadata, use ref duration to estimate. Otherwise, just probe ahead.
 		double refDuration = -1;
 		try {
 			String metadata = strategy.metadata(m.filename);
@@ -379,12 +443,12 @@ public class MonitorHandler implements HttpHandler {
 			LOG.log(Level.FINE, "Could not get metadata for " + m.filename, e);
 		}
 
-		if (refDuration > 0) {
-			double gapAtEnd = refDuration - m.refEnd;
-			if (gapAtEnd >= refineThreshold) {
-				double estimatedEnd = m.queryEnd + gapAtEnd;
-				double bestQueryEnd = m.queryEnd;
-				double bestRefEnd = m.refEnd;
+		// Calculate gap: if we know ref duration, use it. Otherwise assume there's more to find.
+		double gapAtEnd = (refDuration > 0) ? (refDuration - m.refEnd) : refineChunkSize;
+		if (gapAtEnd >= refineThreshold) {
+			double estimatedEnd = m.queryEnd + gapAtEnd;
+			double bestQueryEnd = m.queryEnd;
+			double bestRefEnd = m.refEnd;
 
 				// Chunk positions: right after last detection, midpoint, near estimated end
 				double[] offsets = {
@@ -421,7 +485,6 @@ public class MonitorHandler implements HttpHandler {
 							m.isrc, m.queryEnd, m.refEnd));
 				}
 			}
-		}
 	}
 
 	static class MergedMatch {
