@@ -1,10 +1,15 @@
 services:
   panako:
-    image: innlabkz/ozen-panako:latest
+    build: .
     container_name: ozen-panako
     ports:
       - "8344:8080"
     volumes:
-      - ./data/panako-db:/root/.panako/dbs
+      - ./data/panako-db_1:/root/.panako/dbs
     environment:
       - JAVA_OPTS=-Xmx2g
+    command:
+      - "SERVER_PORT=8080"
+      - "STRATEGY=PANAKO"
+      - "PANAKO_CACHE_TO_FILE=FALSE"
+      - "PANAKO_USE_CACHED_PRINTS=FALSE"

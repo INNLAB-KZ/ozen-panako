@@ -31,3 +31,4 @@ eval_data
 eval_panako
 
 data
+.env
