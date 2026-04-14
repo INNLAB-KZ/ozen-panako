@@ -482,7 +482,50 @@ public enum Key{
 	 * ClickHouse JDBC URL for PANAKO storage.
 	 * Used when PANAKO_STORAGE=CLICKHOUSE.
 	 */
-	PANAKO_CLICKHOUSE_URL("jdbc:ch://localhost:8123/default");
+	PANAKO_CLICKHOUSE_URL("jdbc:ch://localhost:8123/default"),
+
+
+	///////////////////Kafka config
+
+	/**
+	 * Enable Kafka consumer/producer. Set to TRUE to start Kafka integration.
+	 */
+	KAFKA_ENABLED("FALSE"),
+
+	/**
+	 * Kafka bootstrap servers.
+	 */
+	KAFKA_BOOTSTRAP_SERVERS("localhost:9092"),
+
+	/**
+	 * Kafka consumer group ID.
+	 */
+	KAFKA_GROUP_ID("panako"),
+
+	/**
+	 * Topic to consume store requests from.
+	 */
+	KAFKA_STORE_REQUEST_TOPIC("panako-store-requests"),
+
+	/**
+	 * Topic to produce store results to.
+	 */
+	KAFKA_STORE_RESULT_TOPIC("panako-store-results"),
+
+	/**
+	 * Topic to consume monitor requests from.
+	 */
+	KAFKA_MONITOR_REQUEST_TOPIC("panako-monitor-requests"),
+
+	/**
+	 * Topic to produce monitor results to.
+	 */
+	KAFKA_MONITOR_RESULT_TOPIC("panako-monitor-results"),
+
+	/**
+	 * Number of parallel Kafka worker threads.
+	 */
+	KAFKA_WORKER_THREADS(1);
 
 
     String defaultValue;

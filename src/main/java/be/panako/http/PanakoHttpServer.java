@@ -41,7 +41,29 @@ public class PanakoHttpServer {
 	private final Strategy strategy;
 	private final HttpServer server;
 	private final ExecutorService executor;
-	private final ReentrantLock writeLock = new ReentrantLock();
+	private final ReentrantLock writeLock;
+
+	/**
+	 * Returns true if the current storage backend supports concurrent writes (e.g. ClickHouse).
+	 */
+	private static boolean isStorageConcurrent() {
+		String strategy = Config.get(Key.STRATEGY).toUpperCase();
+		if (strategy.equals("OLAF")) {
+			return Config.get(Key.OLAF_STORAGE).equalsIgnoreCase("CLICKHOUSE");
+		} else if (strategy.equals("PANAKO")) {
+			return Config.get(Key.PANAKO_STORAGE).equalsIgnoreCase("CLICKHOUSE");
+		}
+		return false;
+	}
+
+	/**
+	 * A ReentrantLock that does nothing — used when storage supports concurrent writes.
+	 */
+	private static class NoOpLock extends ReentrantLock {
+		@Override public void lock() {}
+		@Override public void unlock() {}
+		@Override public boolean isHeldByCurrentThread() { return false; }
+	}
 
 	/**
 	 * Create a new HTTP server.
@@ -53,6 +75,7 @@ public class PanakoHttpServer {
 	public PanakoHttpServer(int port, int threadPoolSize, int maxUploadSizeMB) throws IOException {
 		this.port = port;
 		this.maxUploadSizeMB = maxUploadSizeMB;
+		this.writeLock = isStorageConcurrent() ? new NoOpLock() : new ReentrantLock();
 
 		this.strategy = Strategy.getInstance();
 		this.executor = Executors.newFixedThreadPool(threadPoolSize);
@@ -190,6 +213,21 @@ public class PanakoHttpServer {
 
 		try {
 			PanakoHttpServer server = new PanakoHttpServer(port, threadPoolSize, maxUploadSizeMB);
+
+			// Start Kafka workers if enabled
+			if (Config.getBoolean(Key.KAFKA_ENABLED)) {
+				int workerCount = Config.getInt(Key.KAFKA_WORKER_THREADS);
+				for (int i = 0; i < workerCount; i++) {
+					PanakoKafkaWorker kafkaWorker = new PanakoKafkaWorker(
+							Strategy.getInstance(), server.writeLock, maxUploadSizeMB);
+					Thread kafkaThread = new Thread(kafkaWorker, "panako-kafka-worker-" + i);
+					kafkaThread.setDaemon(true);
+					kafkaThread.start();
+				}
+				System.out.printf("  Kafka: %d workers started (bootstrap: %s)%n",
+						workerCount, Config.get(Key.KAFKA_BOOTSTRAP_SERVERS));
+			}
+
 			server.start();
 		} catch (IOException e) {
 			LOG.severe("Failed to start HTTP server: " + e.getMessage());
