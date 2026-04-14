@@ -19,7 +19,7 @@ RUN mkdir -p /root/.panako/dbs
 EXPOSE 8080
 
 ENTRYPOINT ["java", "--add-opens=java.base/java.nio=ALL-UNNAMED", "-cp", "/app/panako.jar", "be.panako.http.PanakoHttpServer"]
-CMD ["SERVER_PORT=8080", "STRATEGY=PANAKO"]
+CMD ["SERVER_PORT=8080"]
 
 # Multi-platform (amd64 + arm64):
 #   docker buildx build --platform linux/amd64,linux/arm64 -t innlabkz/ozen-panako:latest --push .

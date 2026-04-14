@@ -168,7 +168,10 @@ public class PanakoHttpServer {
 	public static void main(String[] args) {
 		Locale.setDefault(Locale.US);
 
-		// Read config from environment variables (for Docker)
+		// Initialize Panako config FIRST (loads defaults + config.properties)
+		Config.getInstance();
+
+		// Read config from environment variables (for Docker) — overrides config.properties
 		for (Key key : Key.values()) {
 			String envVal = System.getenv(key.name());
 			if (envVal != null && !envVal.isEmpty()) {
@@ -176,7 +179,7 @@ public class PanakoHttpServer {
 			}
 		}
 
-		// Parse KEY=VALUE arguments (override env vars)
+		// Parse KEY=VALUE arguments — overrides everything
 		for (String arg : args) {
 			if (arg.contains("=")) {
 				String[] parts = arg.split("=", 2);
@@ -189,9 +192,6 @@ public class PanakoHttpServer {
 				}
 			}
 		}
-
-		// Initialize Panako config and decoder
-		Config.getInstance();
 		String pipeEnvironment = Config.get(Key.DECODER_PIPE_ENVIRONMENT);
 		String pipeArgument = Config.get(Key.DECODER_PIPE_ENVIRONMENT_ARG);
 		String pipeCommand = Config.get(Key.DECODER_PIPE_COMMAND);

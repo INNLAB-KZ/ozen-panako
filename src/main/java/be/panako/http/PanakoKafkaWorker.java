@@ -77,7 +77,7 @@ public class PanakoKafkaWorker implements Runnable {
 		consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 		consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 		consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-		consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+		consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 		this.consumer = new KafkaConsumer<>(consumerProps);
 
 		// Producer config
@@ -108,10 +108,14 @@ public class PanakoKafkaWorker implements Runnable {
 						} else if (record.topic().equals(monitorRequestTopic)) {
 							handleMonitorRequest(record);
 						}
+						// Commit only after successful processing
+						consumer.commitSync();
 					} catch (Exception e) {
 						LOG.log(Level.SEVERE, "Kafka message processing failed", e);
 						sendError(record.topic().equals(storeRequestTopic) ? storeResultTopic : monitorResultTopic,
 								record.key(), e.getMessage());
+						// Commit even on error to avoid infinite retry of bad messages
+						consumer.commitSync();
 					}
 				}
 			}
