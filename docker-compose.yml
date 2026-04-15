@@ -21,10 +21,10 @@ services:
       timeout: 3s
       retries: 10
 
-  panako:
+  # HTTP API — query, monitor, stats, single store
+  panako-api:
     image: innlabkz/ozen-panako:latest
-#    build: .
-    container_name: ozen-panako
+    container_name: ozen-panako-api
     ports:
       - "8344:8080"
     environment:
@@ -35,8 +35,28 @@ services:
       - OLAF_CACHE_TO_FILE=FALSE
       - OLAF_USE_CACHED_PRINTS=FALSE
       - SERVER_PORT=8080
+      - MONITOR_STEP_SIZE=${MONITOR_STEP_SIZE:-10}
+      - MONITOR_OVERLAP=${MONITOR_OVERLAP:-5}
+      - KAFKA_ENABLED=FALSE
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # Kafka store worker — bulk import, no public HTTP
+  panako-store:
+    image: innlabkz/ozen-panako:latest
+    container_name: ozen-panako-store
+    environment:
+      - JAVA_OPTS=-Xmx4g
+      - STRATEGY=OLAF
+      - OLAF_STORAGE=CLICKHOUSE
+      - OLAF_CLICKHOUSE_URL=jdbc:ch://clickhouse:8123/default?user=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD:-}
+      - OLAF_CACHE_TO_FILE=FALSE
+      - OLAF_USE_CACHED_PRINTS=FALSE
+      - SERVER_PORT=8081
       - KAFKA_ENABLED=TRUE
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+      - KAFKA_WORKER_THREADS=${KAFKA_WORKER_THREADS:-4}
     depends_on:
       clickhouse:
         condition: service_healthy

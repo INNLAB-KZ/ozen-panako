@@ -78,6 +78,9 @@ public class PanakoKafkaWorker implements Runnable {
 		consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 		consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 		consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+		consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1");
+		consumerProps.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "600000"); // 10 minutes
+		consumerProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000");
 		this.consumer = new KafkaConsumer<>(consumerProps);
 
 		// Producer config

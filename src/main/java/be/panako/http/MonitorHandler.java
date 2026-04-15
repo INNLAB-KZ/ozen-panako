@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,6 +32,17 @@ public class MonitorHandler implements HttpHandler {
 
 	/** Minimum gap (seconds) in match_start/match_end to trigger refinement */
 	// All thresholds read from config at call time — no hardcoded constants
+
+	private static final Semaphore monitorSemaphore =
+			new Semaphore(Config.getInt(Key.MONITOR_MAX_CONCURRENT));
+
+	static boolean tryAcquireMonitorSlot() {
+		return monitorSemaphore.tryAcquire();
+	}
+
+	static void releaseMonitorSlot() {
+		monitorSemaphore.release();
+	}
 
 	private final Strategy strategy;
 	private final long maxBytes;
@@ -62,14 +74,33 @@ public class MonitorHandler implements HttpHandler {
 
 			String filePath = upload.tempFile.toAbsolutePath().toString();
 
-			long startTime = System.currentTimeMillis();
+			// Parse optional query params for step_size and overlap
+			Map<String, String> params = HttpUtil.parseQueryParams(exchange);
+			int stepSize = params.containsKey("step_size")
+					? Integer.parseInt(params.get("step_size"))
+					: Config.getInt(Key.MONITOR_STEP_SIZE);
+			int overlap = params.containsKey("overlap")
+					? Integer.parseInt(params.get("overlap"))
+					: Config.getInt(Key.MONITOR_OVERLAP);
 
-			List<QueryResult> allResults = monitorWithAbsoluteTimes(strategy, filePath);
+			if (!monitorSemaphore.tryAcquire()) {
+				HttpUtil.sendError(exchange, 429,
+						"Too many concurrent monitor requests (max " +
+						Config.getInt(Key.MONITOR_MAX_CONCURRENT) + "). Try again later.");
+				return;
+			}
+			try {
+				long startTime = System.currentTimeMillis();
 
-			long processingTimeMs = System.currentTimeMillis() - startTime;
+				List<QueryResult> allResults = monitorWithAbsoluteTimes(strategy, filePath, stepSize, overlap);
 
-			String json = buildResponseJson(strategy, allResults, filePath, processingTimeMs);
-			HttpUtil.sendJson(exchange, 200, json);
+				long processingTimeMs = System.currentTimeMillis() - startTime;
+
+				String json = buildResponseJson(strategy, allResults, filePath, processingTimeMs);
+				HttpUtil.sendJson(exchange, 200, json);
+			} finally {
+				monitorSemaphore.release();
+			}
 
 		} catch (IOException e) {
 			LOG.log(Level.WARNING, "Monitor request failed", e);
@@ -89,10 +120,13 @@ public class MonitorHandler implements HttpHandler {
 	 * and adjusts queryStart/queryStop to be absolute times in the full recording.
 	 */
 	static List<QueryResult> monitorWithAbsoluteTimes(Strategy strategy, String filePath) throws IOException {
-		double totalDuration = getAudioDuration(filePath);
+		return monitorWithAbsoluteTimes(strategy, filePath,
+				Config.getInt(Key.MONITOR_STEP_SIZE), Config.getInt(Key.MONITOR_OVERLAP));
+	}
 
-		int stepSize = Config.getInt(Key.MONITOR_STEP_SIZE);
-		int overlap = Config.getInt(Key.MONITOR_OVERLAP);
+	static List<QueryResult> monitorWithAbsoluteTimes(Strategy strategy, String filePath,
+													  int stepSize, int overlap) throws IOException {
+		double totalDuration = getAudioDuration(filePath);
 		int actualStep = stepSize - overlap;
 		int maxResults = Config.getInt(Key.NUMBER_OF_QUERY_RESULTS);
 

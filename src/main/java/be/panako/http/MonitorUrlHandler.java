@@ -71,15 +71,23 @@ public class MonitorUrlHandler implements HttpHandler {
 
 			String filePath = audioFile.toAbsolutePath().toString();
 
-			long startTime = System.currentTimeMillis();
+			if (!MonitorHandler.tryAcquireMonitorSlot()) {
+				HttpUtil.sendError(exchange, 429, "Too many concurrent monitor requests. Try again later.");
+				return;
+			}
+			try {
+				long startTime = System.currentTimeMillis();
 
-			java.util.List<be.panako.strategy.QueryResult> allResults =
-					MonitorHandler.monitorWithAbsoluteTimes(strategy, filePath);
+				java.util.List<be.panako.strategy.QueryResult> allResults =
+						MonitorHandler.monitorWithAbsoluteTimes(strategy, filePath);
 
-			long processingTimeMs = System.currentTimeMillis() - startTime;
+				long processingTimeMs = System.currentTimeMillis() - startTime;
 
-			String json = MonitorHandler.buildResponseJson(strategy, allResults, filePath, processingTimeMs);
-			HttpUtil.sendJson(exchange, 200, json);
+				String json = MonitorHandler.buildResponseJson(strategy, allResults, filePath, processingTimeMs);
+				HttpUtil.sendJson(exchange, 200, json);
+			} finally {
+				MonitorHandler.releaseMonitorSlot();
+			}
 
 		} catch (IOException e) {
 			LOG.log(Level.WARNING, "Monitor URL request failed", e);

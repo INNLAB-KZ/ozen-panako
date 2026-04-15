@@ -473,6 +473,18 @@ public enum Key{
 	MONITOR_REFINE_CHUNK_SIZE(30),
 
 	/**
+	 * Maximum number of concurrent monitor requests.
+	 * Additional requests will wait until a slot is available.
+	 */
+	MONITOR_MAX_CONCURRENT(2),
+
+	/**
+	 * Number of parallel threads for processing monitor windows.
+	 * Higher values speed up long audio monitoring at the cost of CPU/memory.
+	 */
+	MONITOR_PARALLEL_WINDOWS(4),
+
+	/**
 	 * ClickHouse JDBC URL for OLAF storage.
 	 * Used when OLAF_STORAGE=CLICKHOUSE.
 	 */
