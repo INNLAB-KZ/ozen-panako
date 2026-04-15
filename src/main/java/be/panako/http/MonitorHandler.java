@@ -250,12 +250,15 @@ public class MonitorHandler implements HttpHandler {
 	 * Extract an audio chunk using ffmpeg with double-precision offset.
 	 */
 	static Path extractAudioChunkDouble(String filePath, double offsetSec, int durationSec) throws IOException {
+		int sampleRate = Config.getInt(Key.OLAF_SAMPLE_RATE);
 		Path chunk = Files.createTempFile("panako_chunk_", ".wav");
 		ProcessBuilder pb = new ProcessBuilder(
 				"ffmpeg", "-y",
 				"-ss", String.format("%.2f", offsetSec),
 				"-t", String.valueOf(durationSec),
 				"-i", filePath,
+				"-ar", String.valueOf(sampleRate),
+				"-ac", "1",
 				chunk.toAbsolutePath().toString());
 		pb.redirectErrorStream(true);
 		Process p = pb.start();
