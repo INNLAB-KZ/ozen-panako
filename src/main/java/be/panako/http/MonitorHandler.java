@@ -3,6 +3,7 @@ package be.panako.http;
 import be.panako.strategy.QueryResult;
 import be.panako.strategy.QueryResultHandler;
 import be.panako.strategy.Strategy;
+import be.panako.strategy.olaf.OlafStrategy;
 import be.panako.util.Config;
 import be.panako.util.Key;
 import com.sun.net.httpserver.HttpExchange;
@@ -12,7 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -129,7 +130,16 @@ public class MonitorHandler implements HttpHandler {
 		double totalDuration = getAudioDuration(filePath);
 		int actualStep = stepSize - overlap;
 		int maxResults = Config.getInt(Key.NUMBER_OF_QUERY_RESULTS);
+		int parallelism = Config.getInt(Key.MONITOR_PARALLEL_WINDOWS);
 
+		if (parallelism <= 1) {
+			return monitorSequential(strategy, filePath, stepSize, actualStep, maxResults, totalDuration);
+		}
+		return monitorParallel(strategy, filePath, stepSize, actualStep, maxResults, totalDuration, parallelism);
+	}
+
+	private static List<QueryResult> monitorSequential(Strategy strategy, String filePath,
+			int stepSize, int actualStep, int maxResults, double totalDuration) throws IOException {
 		List<QueryResult> allResults = new ArrayList<>();
 
 		for (int t = 0; t + stepSize < totalDuration; t += actualStep) {
@@ -149,6 +159,58 @@ public class MonitorHandler implements HttpHandler {
 				try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
 			}
 		}
+
+		return allResults;
+	}
+
+	private static List<QueryResult> monitorParallel(Strategy strategy, String filePath,
+			int stepSize, int actualStep, int maxResults, double totalDuration, int parallelism) throws IOException {
+		List<Integer> offsets = new ArrayList<>();
+		for (int t = 0; t + stepSize < totalDuration; t += actualStep) {
+			offsets.add(t);
+		}
+
+		List<QueryResult> allResults = Collections.synchronizedList(new ArrayList<>());
+		ExecutorService executor = Executors.newFixedThreadPool(parallelism);
+
+		List<Future<?>> futures = new ArrayList<>();
+		for (int t : offsets) {
+			futures.add(executor.submit(() -> {
+				Path chunk = null;
+				try {
+					chunk = extractAudioChunk(filePath, t, stepSize);
+					Strategy localStrategy = new OlafStrategy();
+					CollectingResultHandler handler = new CollectingResultHandler();
+					localStrategy.query(chunk.toAbsolutePath().toString(), maxResults, new HashSet<>(), handler);
+
+					for (QueryResult r : handler.results) {
+						allResults.add(new QueryResult(
+								r.queryPath, r.queryStart + t, r.queryStop + t,
+								r.refPath, r.refIdentifier, r.refStart, r.refStop,
+								r.score, r.timeFactor, r.frequencyFactor,
+								r.percentOfSecondsWithMatches));
+					}
+				} catch (IOException e) {
+					LOG.log(Level.WARNING, "Failed to process window at offset " + t, e);
+				} finally {
+					if (chunk != null) {
+						try { Files.deleteIfExists(chunk); } catch (IOException ignored) {}
+					}
+				}
+			}));
+		}
+
+		for (Future<?> f : futures) {
+			try {
+				f.get();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				break;
+			} catch (ExecutionException e) {
+				LOG.log(Level.WARNING, "Window processing failed", e.getCause());
+			}
+		}
+		executor.shutdown();
 
 		return allResults;
 	}

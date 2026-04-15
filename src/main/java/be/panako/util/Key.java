@@ -480,7 +480,6 @@ public enum Key{
 
 	/**
 	 * Number of parallel threads for processing monitor windows.
-	 * Higher values speed up long audio monitoring at the cost of CPU/memory.
 	 */
 	MONITOR_PARALLEL_WINDOWS(4),
 
